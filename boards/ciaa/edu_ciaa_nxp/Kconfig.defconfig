@@ -1,0 +1,5 @@
+if BOARD_EDU_CIAA_NXP
+
+# UART_CONSOLE se reactiva cuando el driver nxp,lpc43xx-uart esté implementado
+
+endif # BOARD_EDU_CIAA_NXP

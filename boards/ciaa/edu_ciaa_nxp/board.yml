@@ -1,0 +1,6 @@
+board:
+  name: edu_ciaa_nxp
+  full_name: EDU-CIAA-NXP
+  vendor: ciaa
+  socs:
+    - name: lpc4337
