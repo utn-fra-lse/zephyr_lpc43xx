@@ -1,0 +1,23 @@
+# Copyright (c) 2026 UTN FRA - Laboratorio de Sistemas Embebidos
+# SPDX-License-Identifier: Apache-2.0
+
+config SOC_FAMILY_LPC43XX
+	bool
+
+config SOC_SERIES_LPC433X
+	bool
+	select SOC_FAMILY_LPC43XX
+
+config SOC_LPC4337
+	bool
+	select SOC_SERIES_LPC433X
+	select SOC_EARLY_INIT_HOOK
+
+config SOC_FAMILY
+	default "lpc43xx" if SOC_FAMILY_LPC43XX
+
+config SOC_SERIES
+	default "lpc433x" if SOC_SERIES_LPC433X
+
+config SOC
+	default "lpc4337" if SOC_LPC4337
