@@ -1,0 +1,17 @@
+description: NXP LPC43xx System Control Unit (SCU) — multiplexado de pines
+
+compatible: "nxp,lpc43xx-pinctrl"
+
+include: base.yaml
+
+child-binding:
+  description: Grupo de pines del LPC43xx
+  child-binding:
+    description: Nodo de configuración de un pin del LPC43xx.
+    properties:
+      pinmux:
+        required: true
+        type: array
+        description: |
+          Arreglo de valores de configuración de pines codificados con
+          LPC43XX_PIN().

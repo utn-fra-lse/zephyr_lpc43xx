@@ -1,0 +1,9 @@
+description: NXP LPC43xx GPIO_PORT (bloque de registros compartido por los 8 puertos)
+
+compatible: "nxp,lpc43xx-gpio"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
