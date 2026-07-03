@@ -1,0 +1,25 @@
+description: NXP LPC43xx UART/USART (16550-style IP, not a Flexcomm — the clock is
+  a fixed CGU base clock set once at board init, not a per-instance selectable source)
+
+compatible: "nxp,lpc43xx-uart"
+
+include:
+  - name: uart-controller.yaml
+  - name: pinctrl-device.yaml
+  - name: base.yaml
+
+properties:
+  reg:
+    required: true
+
+  interrupts:
+    required: true
+
+  current-speed:
+    required: true
+
+  pinctrl-0:
+    required: true
+
+  pinctrl-names:
+    required: true

@@ -1,0 +1,2 @@
+zephyr_library()
+zephyr_library_sources(pinctrl_nxp_lpc43xx.c)

@@ -1,0 +1,2 @@
+zephyr_library()
+zephyr_library_sources(gpio_nxp_lpc43xx.c)

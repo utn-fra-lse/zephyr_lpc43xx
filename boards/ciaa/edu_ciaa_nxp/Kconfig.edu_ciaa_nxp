@@ -1,0 +1,2 @@
+config BOARD_EDU_CIAA_NXP
+	select SOC_LPC4337

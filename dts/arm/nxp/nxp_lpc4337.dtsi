@@ -1,0 +1,157 @@
+/*
+ * Copyright (c) 2026 UTN FRA - Laboratorio de Sistemas Embebidos
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <arm/armv7-m.dtsi>
+#include <zephyr/dt-bindings/gpio/gpio.h>
+
+/ {
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-m4f";
+			reg = <0>;
+		};
+	};
+
+	flash0: flash@1a000000 {
+		compatible = "soc-nv-flash";
+		reg = <0x1a000000 0x40000>;   /* Banco A, 256 KB */
+	};
+
+	sram0: memory@10000000 {
+		compatible = "mmio-sram";
+		reg = <0x10000000 0x8000>;    /* 32 KB SRAM local, banco 1 */
+	};
+
+	sram1: memory@10080000 {
+		compatible = "mmio-sram";
+		reg = <0x10080000 0xa000>;    /* 40 KB SRAM local, banco 2 */
+	};
+
+	sram2: memory@20000000 {
+		compatible = "mmio-sram";
+		reg = <0x20000000 0x8000>;    /* 32 KB SRAM AHB, banco 1 */
+	};
+
+	sram3: memory@20008000 {
+		compatible = "mmio-sram";
+		reg = <0x20008000 0x4000>;    /* 16 KB SRAM AHB, banco 2 */
+	};
+
+	soc {
+		pinctrl: pinctrl@40086000 {
+			compatible = "nxp,lpc43xx-pinctrl";
+			reg = <0x40086000 0x800>;
+		};
+
+		uart0: uart@40081000 {
+			compatible = "nxp,lpc43xx-uart";
+			reg = <0x40081000 0x1000>;   /* USART0 */
+			interrupts = <24 0>;
+			status = "disabled";
+		};
+
+		uart1: uart@40082000 {
+			compatible = "nxp,lpc43xx-uart";
+			reg = <0x40082000 0x1000>;   /* UART1 */
+			interrupts = <25 0>;
+			status = "disabled";
+		};
+
+		uart2: uart@400c1000 {
+			compatible = "nxp,lpc43xx-uart";
+			reg = <0x400c1000 0x1000>;   /* UART2 */
+			interrupts = <26 0>;
+			status = "disabled";
+		};
+
+		uart3: uart@400c2000 {
+			compatible = "nxp,lpc43xx-uart";
+			reg = <0x400c2000 0x1000>;   /* UART3 */
+			interrupts = <27 0>;
+			status = "disabled";
+		};
+
+		gpio: gpio@400f6000 {
+			compatible = "nxp,lpc43xx-gpio";
+			reg = <0x400f6000 0x400>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			gpio0: port@0 {
+				compatible = "nxp,lpc43xx-gpio-port";
+				reg = <0>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				status = "okay";
+			};
+
+			gpio1: port@1 {
+				compatible = "nxp,lpc43xx-gpio-port";
+				reg = <1>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				status = "okay";
+			};
+
+			gpio2: port@2 {
+				compatible = "nxp,lpc43xx-gpio-port";
+				reg = <2>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				status = "okay";
+			};
+
+			gpio3: port@3 {
+				compatible = "nxp,lpc43xx-gpio-port";
+				reg = <3>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				status = "okay";
+			};
+
+			gpio4: port@4 {
+				compatible = "nxp,lpc43xx-gpio-port";
+				reg = <4>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				status = "okay";
+			};
+
+			gpio5: port@5 {
+				compatible = "nxp,lpc43xx-gpio-port";
+				reg = <5>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				status = "okay";
+			};
+
+			gpio6: port@6 {
+				compatible = "nxp,lpc43xx-gpio-port";
+				reg = <6>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				status = "okay";
+			};
+
+			gpio7: port@7 {
+				compatible = "nxp,lpc43xx-gpio-port";
+				reg = <7>;
+				gpio-controller;
+				#gpio-cells = <2>;
+				status = "okay";
+			};
+		};
+	};
+};
+
+/* El núcleo Cortex-M4 del LPC43xx tiene 3 bits de prioridad NVIC (8 niveles),
+ * según el header CMSIS oficial para CORE_M4. */
+&nvic {
+	arm,num-irq-priority-bits = <3>;
+};

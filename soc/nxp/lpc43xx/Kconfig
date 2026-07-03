@@ -1,0 +1,17 @@
+# Copyright (c) 2026 UTN FRA - Laboratorio de Sistemas Embebidos
+# SPDX-License-Identifier: Apache-2.0
+
+config SOC_FAMILY_LPC43XX
+	select ARM
+
+config SOC_LPC4337
+	select CPU_CORTEX_M4
+	select CPU_HAS_ARM_MPU
+	select CPU_HAS_FPU
+	select CPU_CORTEX_M_HAS_SYSTICK
+
+config UART_LPC43XX
+	bool "NXP LPC43xx UART driver"
+	default y
+	depends on DT_HAS_NXP_LPC43XX_UART_ENABLED
+	select SERIAL_HAS_DRIVER

@@ -1,0 +1,21 @@
+description: Un puerto GPIO del LPC43xx (índice dentro de GPIO_PORT)
+
+compatible: "nxp,lpc43xx-gpio-port"
+
+include:
+  - name: gpio-controller.yaml
+  - name: base.yaml
+
+properties:
+  reg:
+    required: true
+    description: índice de puerto dentro de los arreglos de GPIO_PORT (0-7)
+  "#gpio-cells":
+    const: 2
+  ngpios:
+    type: int
+    default: 32
+
+gpio-cells:
+  - pin
+  - flags

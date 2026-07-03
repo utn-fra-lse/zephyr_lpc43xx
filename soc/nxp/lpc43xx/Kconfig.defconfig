@@ -1,0 +1,12 @@
+# Copyright (c) 2026 UTN FRA - Laboratorio de Sistemas Embebidos
+# SPDX-License-Identifier: Apache-2.0
+
+if SOC_LPC4337
+
+config NUM_IRQS
+	default 53
+
+config SYS_CLOCK_HW_CYCLES_PER_SEC
+	default 204000000
+
+endif # SOC_LPC4337

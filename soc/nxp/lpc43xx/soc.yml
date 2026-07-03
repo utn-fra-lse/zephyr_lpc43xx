@@ -1,0 +1,6 @@
+family:
+  - name: lpc43xx
+    series:
+      - name: lpc433x
+        socs:
+          - name: lpc4337

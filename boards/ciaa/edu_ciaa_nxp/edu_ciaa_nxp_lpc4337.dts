@@ -1,0 +1,145 @@
+/*
+ * Copyright (c) 2026 UTN FRA - Laboratorio de Sistemas Embebidos
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/dts-v1/;
+#include <nxp/nxp_lpc4337.dtsi>
+#include <dt-bindings/pinctrl/lpc43xx-pinctrl.h>
+
+/ {
+	model = "EDU-CIAA-NXP";
+	compatible = "ciaa,edu-ciaa-nxp";
+
+	chosen {
+		zephyr,sram  = &sram0;
+		zephyr,flash = &flash0;
+		zephyr,console = &uart2;
+	};
+
+	/*
+	 * Nombres y pines confirmados contra la tabla de la sAPI del firmware
+	 * oficial del proyecto CIAA (sapi_gpio.c). LED1/LED2/LED3 quedan en
+	 * GPIO por default de reset (FUNC0); LEDR/LEDG/LEDB (el LED RGB)
+	 * requieren FUNC4 explícito — ver el grupo leds_default de &pinctrl
+	 * más abajo y la nota en lpc43xx-pinctrl.h.
+	 */
+	leds {
+		compatible = "gpio-leds";
+
+		led_1: led_1 {
+			gpios = <&gpio0 14 GPIO_ACTIVE_HIGH>;
+			label = "LED1";
+		};
+
+		led_2: led_2 {
+			gpios = <&gpio1 11 GPIO_ACTIVE_HIGH>;
+			label = "LED2";
+		};
+
+		led_3: led_3 {
+			gpios = <&gpio1 12 GPIO_ACTIVE_HIGH>;
+			label = "LED3";
+		};
+
+		led_r: led_r {
+			gpios = <&gpio5 0 GPIO_ACTIVE_HIGH>;
+			label = "LED RGB - Rojo";
+		};
+
+		led_g: led_g {
+			gpios = <&gpio5 1 GPIO_ACTIVE_HIGH>;
+			label = "LED RGB - Verde";
+		};
+
+		led_b: led_b {
+			gpios = <&gpio5 2 GPIO_ACTIVE_HIGH>;
+			label = "LED RGB - Azul";
+		};
+	};
+
+	/* Pulsadores TEC1-TEC4. Activos en bajo con pull-up (convención
+	 * estándar de botón a masa usada por la sAPI del proyecto CIAA). */
+	buttons: gpio_keys {
+		compatible = "gpio-keys";
+
+		tec_1: tec_1 {
+			gpios = <&gpio0 4 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			label = "TEC1";
+		};
+
+		tec_2: tec_2 {
+			gpios = <&gpio0 8 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			label = "TEC2";
+		};
+
+		tec_3: tec_3 {
+			gpios = <&gpio0 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			label = "TEC3";
+		};
+
+		tec_4: tec_4 {
+			gpios = <&gpio1 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			label = "TEC4";
+		};
+	};
+
+	aliases {
+		led0 = &led_1;
+		led1 = &led_2;
+		led2 = &led_3;
+		ledr = &led_r;
+		ledg = &led_g;
+		ledb = &led_b;
+		sw0 = &tec_1;
+		sw1 = &tec_2;
+		sw2 = &tec_3;
+		sw3 = &tec_4;
+	};
+};
+
+&pinctrl {
+	/* LED1-LED3 y TEC1-TEC4 ya están en GPIO por default de reset (FUNC0)
+	 * y funcionan sin aplicar este estado. El grupo leds_default es
+	 * imprescindible para LEDR/LEDG/LEDB (FUNC4, no es el default).
+	 *
+	 * [verificar] gpio-leds/gpio-keys son bindings genéricos de Zephyr sin
+	 * propiedad pinctrl-0 declarada — no se referencia este estado desde
+	 * los nodos "leds"/"buttons" de arriba. Hasta que se confirme el
+	 * mecanismo correcto (pinctrl-0 en el nodo o un pinctrl_apply_state()
+	 * manual desde código de placa), aplicar leds_default a mano antes de
+	 * usar el LED RGB. */
+	leds_default: leds_default {
+		group1 {
+			pinmux = <EDU_CIAA_PIN_LEDR>,
+				 <EDU_CIAA_PIN_LEDG>,
+				 <EDU_CIAA_PIN_LEDB>,
+				 <EDU_CIAA_PIN_LED1>,
+				 <EDU_CIAA_PIN_LED2>,
+				 <EDU_CIAA_PIN_LED3>;
+		};
+	};
+
+	buttons_default: buttons_default {
+		group1 {
+			pinmux = <EDU_CIAA_PIN_TEC1>,
+				 <EDU_CIAA_PIN_TEC2>,
+				 <EDU_CIAA_PIN_TEC3>,
+				 <EDU_CIAA_PIN_TEC4>;
+		};
+	};
+
+	uart2_default: uart2_default {
+		group1 {
+			pinmux = <EDU_CIAA_PIN_UART2_TXD>,
+				 <EDU_CIAA_PIN_UART2_RXD>;
+		};
+	};
+};
+
+&uart2 {
+	status = "okay";
+	current-speed = <115200>;
+	pinctrl-0 = <&uart2_default>;
+	pinctrl-names = "default";
+};
