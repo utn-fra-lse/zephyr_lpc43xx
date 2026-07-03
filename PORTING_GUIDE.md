@@ -5,9 +5,11 @@ Abierta Argentina, iniciativa conjunta de ACSE y CADIEEL), montada sobre el SoC 
 LPC4337 — Cortex-M4F (204 MHz) + coprocesador Cortex-M0, 512 KB de Flash (2 bancos de
 256 KB), 136 KB de SRAM total
 **Versión de Zephyr:** v4.2.0
-**Estado:** build y flasheo funcionando (GPIO + pinctrl implementados). UART pendiente.
-Ver la nota sobre el core M0 en la sección de [Flasheo](#8-flasheo) y en la
-[sección 10](#10-porting-de-un-soc-con-múltiples-procesadores-amp).
+**Estado:** build y flasheo funcionando. GPIO, pinctrl y UART (polling, por USART2)
+implementados y probados en hardware. Ver la sección [Driver de UART](#8-driver-de-uart)
+para las lecciones de la puesta en marcha, la nota sobre el core M0 en la sección de
+[Flasheo](#9-flasheo), y la [sección 11](#11-porting-de-un-soc-con-múltiples-procesadores-amp)
+para lo que falta del M0.
 
 Esta guía documenta, archivo por archivo, qué hace cada pieza del módulo y por qué existe
 en ese lugar. No reproduce el contenido de los archivos — el código fuente real vive en
@@ -16,7 +18,7 @@ decisiones no obvias y los problemas esperables de cada uno.
 
 > **Nota sobre el hardware:** el LPC4337 es un chip **dual-core** (Cortex-M4 principal +
 > coprocesador Cortex-M0). Este port implementa hasta ahora solo el núcleo M4 (el caso
-> típico y el que hay que hacer funcionar primero). La sección 10 trata el escenario AMP
+> típico y el que hay que hacer funcionar primero). La sección 11 trata el escenario AMP
 > (Asymmetric Multi-Processing) con ambos núcleos — que es el caso real de este chip, no
 > un ejemplo hipotético — y documenta qué falta para arrancar el M0 en el futuro.
 
@@ -70,7 +72,8 @@ lpc43xx-zephyr/
 │   └── bindings/
 │       ├── gpio/nxp,lpc43xx-gpio.yaml
 │       ├── gpio/nxp,lpc43xx-gpio-port.yaml
-│       └── pinctrl/nxp,lpc43xx-pinctrl.yaml
+│       ├── pinctrl/nxp,lpc43xx-pinctrl.yaml
+│       └── serial/nxp,lpc43xx-uart.yaml
 ├── include/
 │   └── dt-bindings/
 │       └── pinctrl/
@@ -90,9 +93,12 @@ lpc43xx-zephyr/
     ├── pinctrl/                     # Driver de pinctrl (Fase 6)
     │   ├── CMakeLists.txt
     │   └── pinctrl_nxp_lpc43xx.c
-    └── gpio/                        # Driver de GPIO (Fase 7)
+    ├── gpio/                        # Driver de GPIO (Fase 7)
+    │   ├── CMakeLists.txt
+    │   └── gpio_nxp_lpc43xx.c
+    └── serial/                      # Driver de UART (Fase 8)
         ├── CMakeLists.txt
-        └── gpio_nxp_lpc43xx.c
+        └── serial_nxp_lpc43xx.c
 ```
 
 ---
@@ -179,7 +185,15 @@ Zephyr distingue tres responsabilidades distintas, cada una en su propio archivo
 - **`Kconfig`** — capacidades de hardware: `select CPU_CORTEX_M4`, `CPU_HAS_ARM_MPU`,
   `CPU_HAS_FPU` (el M4 del LPC4337 tiene FPU de precisión simple — confirmado por el
   header CMSIS oficial, `__FPU_PRESENT 1` bajo `CORE_M4`) y
-  `CPU_CORTEX_M_HAS_SYSTICK`.
+  `CPU_CORTEX_M_HAS_SYSTICK`. También define `UART_LPC43XX` (ver
+  [sección 8](#8-driver-de-uart)) — el símbolo de habilitación dedicado del driver de
+  UART vive acá porque `soc/nxp/lpc43xx/Kconfig` ya se sabe que se incluye
+  automáticamente; un `drivers/serial/Kconfig` nuevo necesitaría su propio `source`/
+  `rsource` que nada provee todavía. Un `select CLOCK_CONTROL` que estaba acá quedó
+  comentado: nada en este port usa la API `clock_control` de Zephyr (`soc.c` y el driver
+  de UART tocan la CGU con registros crudos directamente) — dejarlo activo solo generaba
+  un warning cosmético de CMake (`No SOURCES given to Zephyr library: drivers__clock_control`)
+  sin aportar nada.
 - **`Kconfig.defconfig`** — valores numéricos por defecto para símbolos ya existentes de
   Zephyr, nunca símbolos nuevos: `NUM_IRQS = 53` (la tabla de vectores del M4 llega hasta
   `QEI_IRQn = 52`, confirmado contra el enum `IRQn_Type` del header CMSIS oficial) y
@@ -237,10 +251,10 @@ tiene 512 KB de flash en total, no 1 MB: ese tamaño es el de la serie LPC43x7):
 | Región | Dirección | Tamaño | Uso en este port |
 |---|---|---|---|
 | Flash banco A | `0x1A000000` | 256 KB | `flash0` / código del M4 |
-| Flash banco B | `0x1B000000` | 256 KB | libre (candidato para imagen del M0, sección 10) |
+| Flash banco B | `0x1B000000` | 256 KB | libre (candidato para imagen del M0, sección 11) |
 | SRAM local banco 1 | `0x10000000` | 32 KB | `sram0` / `zephyr,sram` del M4 |
-| SRAM local banco 2 | `0x10080000` | 40 KB | libre (candidato para RAM del M0, sección 10) |
-| SRAM AHB banco 1 | `0x20000000` | 32 KB | `sram2` — también usada como work-area de OpenOCD (sección 8) |
+| SRAM local banco 2 | `0x10080000` | 40 KB | libre (candidato para RAM del M0, sección 11) |
+| SRAM AHB banco 1 | `0x20000000` | 32 KB | `sram2` — también usada como work-area de OpenOCD (sección 9) |
 | SRAM AHB banco 2 | `0x20008000` | 16 KB | `sram3` |
 
 ---
@@ -262,8 +276,17 @@ Puntos no obvios:
   **índice de puerto** (0-7) dentro de los arreglos de registros compartidos, no como
   dirección de memoria — de ahí `#size-cells = <0>` en el nodo padre. El detalle de por
   qué está en la sección 7 (driver de GPIO).
-- `uart0`/`uart1` (USART0/UART1) están declarados pero `status = "disabled"`: el driver
-  de UART todavía no existe (ver la sección "Cómo agregar un driver nuevo").
+- Los cuatro UART del chip están declarados (`uart0`=USART0, `uart1`=UART1,
+  `uart2`=USART2, `uart3`=USART3), pero solo `uart2` está habilitado a nivel de placa
+  (ver sección 5) — los demás quedan `status = "disabled"` en el `.dtsi` de SoC.
+  **`uart2` y `uart3` NO son contiguos con `uart0`/`uart1` en el mapa de memoria**:
+  `0x40081000`/`0x40082000` para USART0/UART1, pero `0x400C1000`/`0x400C2000` para
+  USART2/USART3 — un salto de bus completo, no `+0x1000` por instancia. Este port tuvo
+  un bug real por asumir lo contrario (`uart2` mal puesto en `0x40083000`, extrapolando
+  la progresión aritmética de `uart0`/`uart1`): compilaba y flasheaba sin error, pero
+  el UART nunca respondía porque esa dirección no correspondía a ningún periférico real.
+  **No extrapolar direcciones de periféricos — confirmar cada una individualmente**
+  contra el header CMSIS o UM10503.
 
 ### `dts/bindings/gpio/nxp,lpc43xx-gpio.yaml` y `nxp,lpc43xx-gpio-port.yaml`
 
@@ -338,16 +361,18 @@ Puntos no obvios:
   (`pinctrl-0` en el nodo, o un `pinctrl_apply_state()` manual desde código de placa)
   antes de que el LED RGB funcione.
 - `uart0` se mantiene deshabilitado: los pines P2_0/P2_1 (donde en otras placas suele
-  mapearse USART0 TXD/RXD) están soldados acá al LED RGB, no a un conector serie. El
-  puente USB-serie de depuración de esta placa sale por el canal B del FT2232H (U6); el
-  pin exacto del LPC4337 al que se conecta ese canal no está confirmado
-  **[verificar]** — ver sección 8.
+  mapearse USART0 TXD/RXD) están soldados acá al LED RGB, no a un conector serie.
+  El puente USB-serie de depuración de esta placa sale por el canal B del FT2232H (U6),
+  conectado a **USART2** en P7_1 (TXD)/P7_2 (RXD), FUNC6 — confirmado por prueba directa
+  en hardware (`poll_out`/`poll_in` funcionando extremo a extremo contra un terminal
+  serie). `uart2` es el único UART habilitado en este `.dts`; ver sección 8 para el
+  driver.
 - Cualquier pin "genérico" del LPC4337 que se quiera usar para un periférico nuevo debe
   chequearse contra esta tabla antes de asumir que está libre en esta placa específica.
 
 ### `boards/ciaa/edu_ciaa_nxp/board.cmake` y `support/openocd.cfg`
 
-Ver sección 8 — el debugger on-board de esta placa (FT2232H por JTAG) es
+Ver sección 9 — el debugger on-board de esta placa (FT2232H por JTAG) es
 significativamente distinto del de un devkit NXP genérico (LPC-Link2 por SWD), así que
 esta configuración no es intercambiable con la de otra placa LPC43xx.
 
@@ -424,7 +449,84 @@ Trivial: una librería con un solo archivo fuente.
 
 ---
 
-## 8. Flasheo
+## 8. Driver de UART
+
+Único UART habilitado en esta placa: `uart2` (USART2), por las razones de cableado
+explicadas en la sección 5. El driver es de **polling puro** (`poll_in`/`poll_out`
+únicamente) — sin interrupciones, sin runtime-configure, sin async. Probado extremo a
+extremo contra un terminal serie por el canal B del FT2232H on-board.
+
+### `dts/bindings/serial/nxp,lpc43xx-uart.yaml`
+
+El UART/USART del LPC43xx es una IP estilo 16550 (misma familia que el UART del LPC17xx),
+**no** un Flexcomm como el de otras familias LPC más nuevas (LPC84x, LPC54xxx, LPC55xxx) —
+importante no copiar el binding de esas familias como plantilla: un Flexcomm tiene un
+`clock-source` seleccionable por instancia (`fro`/`frg0`/`frg1`/...) que no existe acá. El
+binding incluye `uart-controller.yaml` (trae `current-speed`, `parity`, `stop-bits`,
+`data-bits` gratis) y `pinctrl-device.yaml` (trae `pinctrl-0`..`pinctrl-4` y
+`pinctrl-names` — preferido sobre declarar esas propiedades a mano, como hacen algunos
+bindings LPC más viejos). No declara `clocks`: el clock de este UART no es un consumidor
+de un `clock_control` device de Zephyr, es un registro de la CGU que el propio driver
+prende directamente (ver más abajo).
+
+### `drivers/serial/serial_nxp_lpc43xx.c`
+
+Registros usados (offsets relativos a la dirección de cada instancia — **no confundir
+con un bloque compartido tipo GPIO_PORT**: a diferencia del GPIO, cada UART tiene su
+propia dirección base independiente, así que `DT_INST_REG_ADDR(n)` ya es la dirección
+completa de esa instancia, sin necesidad de índice):
+
+| Offset | Registro(s) | Uso en este driver |
+|---|---|---|
+| `0x00` | `RBR`/`THR`/`DLL` | mismo registro físico, 3 significados según DLAB (bit 7 de LCR) y dirección de acceso |
+| `0x04` | `IER`/`DLM` | solo se usa `DLM` (byte alto del divisor de baudrate) |
+| `0x08` | `FCR`/`IIR` | solo se usa `FCR`, de solo escritura (control de FIFO) |
+| `0x0C` | `LCR` | formato de trama + bit DLAB |
+| `0x10` | `MCR` | sin usar — presente solo para que `LSR` caiga en el offset correcto |
+| `0x14` | `LSR` | bit 0 = dato recibido listo, bit 5 = THR vacío |
+
+`uart_lpc43xx_init()` hace, en este orden, y el orden importa:
+
+1. **Habilita el "branch clock" de la CGU para esta instancia** (`BASE_UART0_CLK` en
+   `0x4005009C`, `BASE_UART1_CLK` en `0x400500A0`, `BASE_UART2_CLK` en `0x400500A4`,
+   `BASE_UART3_CLK` en `0x400500A8` — mismo layout de campo que `BASE_M4_CLK` en `soc.c`,
+   `CLK_SEL` en bits `[28:24]`, `0x09` = PLL1). **Este paso es la lección más cara de
+   todo este driver**: `soc.c` solo prende `BASE_M4_CLK` (el clock del núcleo). Ningún
+   otro periférico tiene su branch clock activo por default — a diferencia de MCUs más
+   simples, en la CGU del LPC43xx cada periférico necesita su propio enable explícito.
+   Sin este paso, el driver compila, flashea, y `poll_out` se cuelga para siempre
+   esperando `LSR & THRE`, porque el periférico nunca reacciona a nada — ni siquiera a
+   los propios `LCR`/`DLL`/`FCR` que el resto del `init()` escribe. Como los cuatro
+   offsets no son una progresión aritmética a partir de la dirección del periférico,
+   el driver los resuelve con una función que mapea `regs` (la dirección física de la
+   instancia) al offset correcto — no se pueden derivar por cálculo.
+2. Aplica el estado de pinctrl (`pinctrl_apply_state()`), igual que en cualquier otro
+   driver que use pines.
+3. Calcula el divisor de baudrate: `CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC / (16 * baudrate)`.
+   Válido porque `soc.c` deja el clock del núcleo (y, ahora, el de este UART) en la
+   misma PLL1 a 204 MHz — si algún día alguno de los dos se reconfigura a una fuente o
+   divisor distinto, este cálculo queda desactualizado sin ningún error de compilación
+   ni de runtime, solo un baudrate incorrecto.
+4. Habilita y resetea los FIFOs (`FCR`).
+
+### `drivers/serial/CMakeLists.txt`
+
+Trivial: una librería con un solo archivo fuente.
+
+### `soc/nxp/lpc43xx/Kconfig` — `config UART_LPC43XX`
+
+A diferencia de GPIO/pinctrl, UART sí necesita un símbolo de habilitación dedicado
+(`depends on DT_HAS_NXP_LPC43XX_UART_ENABLED`, `select SERIAL_HAS_DRIVER`) — no alcanza
+con el genérico `CONFIG_SERIAL` de Zephyr. Motivo concreto: `CONFIG_UART_CONSOLE` (lo que
+permite rutear `printk` por este UART) tiene `depends on SERIAL && SERIAL_HAS_DRIVER` en
+el árbol de Kconfig de Zephyr, y `SERIAL_HAS_DRIVER` es un bool oculto que **ningún**
+backend activa automáticamente — tiene que seleccionarlo explícitamente el driver
+concreto. Sin este símbolo, `UART_CONSOLE` queda inseleccionable para siempre, sin
+importar qué más esté prendido.
+
+---
+
+## 9. Flasheo
 
 ### Build
 
@@ -465,7 +567,7 @@ cada `reset halt` hace timeout (`TARGET: lpc4337.m0 - Not halted`), porque **el 
 tiene clock ni sale de reset hasta que el M4 lo habilita explícitamente en tiempo de
 ejecución** (vía CREG/RGU) — y como el firmware actual es de un solo núcleo, el M4 nunca
 hace eso. No es un bug de la config de OpenOCD: es el comportamiento esperado hasta que
-exista bring-up del M0. Ver la sección 10 para qué falta implementar.
+exista bring-up del M0. Ver la sección 11 para qué falta implementar.
 
 ### Comando de flasheo
 
@@ -510,11 +612,13 @@ Herramientas compatibles con LPC43xx: [Flash Magic](https://www.flashmagictool.c
 
 ---
 
-## 9. Cómo agregar un driver de periférico nuevo
+## 10. Cómo agregar un driver de periférico nuevo
 
 Checklist genérico, usando UART como ejemplo — pero aplica igual a SPI, I2C, ADC, etc.
 Se marca **CREAR** para archivos nuevos y **MODIFICAR** para archivos ya existentes que
-hay que tocar.
+hay que tocar. La sección 8 (Driver de UART) es este mismo checklist ya resuelto para un
+caso real, con las dos trampas concretas que costaron más tiempo — vale la pena leerla
+antes de repetir el proceso para otro periférico.
 
 1. **CREAR** `dts/bindings/<subsistema>/nxp,lpc43xx-<periferico>.yaml` — el binding de
    Zephyr para el nuevo compatible (p. ej. `nxp,lpc43xx-uart`). Incluir el binding base
@@ -542,6 +646,14 @@ hay que tocar.
    compila como librería separada de la de Zephyr (no hace falta
    `zephyr_library_include_directories()` acá: ya lo scopea el propio
    `add_subdirectory()` que se agrega en el paso 7).
+
+   **Antes de dar el driver por terminado, confirmar si el periférico tiene su propio
+   "branch clock" en la CGU** (un registro `BASE_<PERIFERICO>_CLK`, en el mismo bloque
+   que `BASE_M4_CLK`). `soc.c` solo prende el clock del núcleo — nada más viene
+   habilitado por default. El síntoma de saltearse esto no es un error de compilación
+   ni un fault obvio: el periférico simplemente no reacciona a nada (registros que no
+   cambian, flags de estado que nunca se setean), como pasó con UART (sección 8) hasta
+   agregar el enable de `BASE_UART2_CLK` en el propio `init()` del driver.
 
 6. **CREAR** (o **MODIFICAR** si ya existe uno para el subsistema)
    `drivers/<subsistema>/Kconfig` — un símbolo de habilitación dedicado, por ejemplo:
@@ -571,12 +683,12 @@ hay que tocar.
 
 ---
 
-## 10. Porting de un SoC con múltiples procesadores (AMP)
+## 11. Porting de un SoC con múltiples procesadores (AMP)
 
 El LPC4337 es un caso real, no hipotético, de este escenario: Cortex-M4 principal +
 coprocesador Cortex-M0 (`M0APP` en la tabla de IRQ del M4, IRQ 1). Este port hoy solo
 implementa el M4 — lo que ya se ve reflejado en la práctica en el problema descrito en la
-sección 8: el `target` M0 de OpenOCD hace timeout porque nada lo saca de reset todavía.
+sección 9: el `target` M0 de OpenOCD hace timeout porque nada lo saca de reset todavía.
 
 ### Qué falta para arrancar el M0
 
@@ -630,5 +742,10 @@ sección 8: el `target` M0 de OpenOCD hace timeout porque nada lo saca de reset 
 | `boards/nxp/<placa>` para una placa que no diseña NXP | Confusión sobre a quién pertenece el layer | `vendor` en `board.yml` es quien diseña la placa (`ciaa`), no quien fabrica el SoC (`soc/nxp/` sigue siendo NXP) |
 | `BOARD_<NOMBRE>` no coincide con el `name` de `board.yml` en mayúsculas | La placa compila pero `Kconfig.defconfig` nunca se activa (falla silenciosa) | Para `name: edu_ciaa_nxp` el símbolo es `BOARD_EDU_CIAA_NXP` |
 | Asumir un LPC-Link2/CMSIS-DAP + SWD genérico para el debugger | OpenOCD no encuentra el DP, o falla con "unable to find CMSIS-DAP" | La EDU-CIAA-NXP trae un FT2232H on-board por **JTAG** (VID:PID `0x0403:0x6010`), no un probe NXP por SWD |
-| Crear un `target` de OpenOCD para el M0 sin haber implementado su bring-up | Timeout en cada `reset halt` (`Not halted`) | El M0 no tiene clock hasta que el M4 lo habilita vía CREG/RGU en tiempo de ejecución (sección 10); hasta entonces, declarar solo el `jtag newtap`, sin `target` |
+| Crear un `target` de OpenOCD para el M0 sin haber implementado su bring-up | Timeout en cada `reset halt` (`Not halted`) | El M0 no tiene clock hasta que el M4 lo habilita vía CREG/RGU en tiempo de ejecución (sección 11); hasta entonces, declarar solo el `jtag newtap`, sin `target` |
 | Reusar pines "genéricos" del chip (p. ej. P2_0/P2_1 para UART0) sin chequear la placa | El periférico nunca responde, o se pisa con otra función ya cableada (acá, el LED RGB) | Confirmar cada pin contra la tabla de la sAPI/esquemático de la EDU-CIAA-NXP antes de asumir que está libre |
+| Extrapolar la dirección de una instancia de periférico a partir de otra (p. ej. `uart2` = `uart1` + `0x1000`) | Compila y flashea sin error; el periférico nunca responde (`poll_out` cuelga para siempre) | Las instancias de un mismo periférico no son necesariamente contiguas — USART2/USART3 del LPC43xx están en `0x400C1000`/`0x400C2000`, un bloque de bus completo aparte de USART0/UART1 (`0x40081000`/`0x40082000`); confirmar cada dirección individualmente contra el header CMSIS |
+| No habilitar el "branch clock" propio del periférico en la CGU (`BASE_<PERIFERICO>_CLK`) | Mismo síntoma que el de arriba — cuelgue esperando un bit de estado que nunca cambia, aun con la dirección correcta | `soc.c` solo prende `BASE_M4_CLK` (el clock del núcleo); cada periférico necesita su propio enable explícito (`CLK_SEL` = PLL1) antes de que sus registros reaccionen a algo — hacerlo en el `init()` del driver, no en `soc.c` |
+| Nodo de DTS con hex en mayúsculas en la unit-address (p. ej. `uart@400C1000`) | Warning de `dtc`: `simple_bus_reg: unit address format error` | La unit-address del nombre del nodo debe ser hex en minúscula, igual que el valor canónico de `reg` |
+| Un header de LPCOpen (p. ej. `config_43xx/sys_config.h`) con un `#define` incondicional que ya se define globalmente en `cmake/CMakeLists.txt` | Warning del compilador: `"CHIP_LPC43XX" redefined` | Guardar el `#define` en el header con `#ifndef` — `sys_config.h` es justamente el archivo que LPCOpen espera que el integrador edite, a diferencia del resto de la HAL |
+| `select CLOCK_CONTROL` (u otro subsistema de Zephyr) sin un driver real detrás | Warning de CMake: `No SOURCES given to Zephyr library: drivers__<subsistema>` — no es un error, pero es ruido evitable | Sacar el `select` si nada en el port llama a la API de ese subsistema (acá, `CLOCK_CONTROL` quedó sin uso porque el clock se maneja con registros crudos) |
