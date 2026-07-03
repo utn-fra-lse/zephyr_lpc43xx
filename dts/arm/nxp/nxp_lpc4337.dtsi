@@ -63,6 +63,20 @@
 			status = "disabled";
 		};
 
+		uart2: uart@400c1000 {
+			compatible = "nxp,lpc43xx-uart";
+			reg = <0x400c1000 0x1000>;   /* UART2 */
+			interrupts = <26 0>;
+			status = "disabled";
+		};
+
+		uart3: uart@400c2000 {
+			compatible = "nxp,lpc43xx-uart";
+			reg = <0x400c2000 0x1000>;   /* UART3 */
+			interrupts = <27 0>;
+			status = "disabled";
+		};
+
 		gpio: gpio@400f6000 {
 			compatible = "nxp,lpc43xx-gpio";
 			reg = <0x400f6000 0x400>;
