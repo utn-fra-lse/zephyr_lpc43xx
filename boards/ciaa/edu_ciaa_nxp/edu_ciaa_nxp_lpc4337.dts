@@ -14,6 +14,7 @@
 	chosen {
 		zephyr,sram  = &sram0;
 		zephyr,flash = &flash0;
+		zephyr,console = &uart2;
 	};
 
 	/*
@@ -127,11 +128,18 @@
 				 <EDU_CIAA_PIN_TEC4>;
 		};
 	};
+
+	uart2_default: uart2_default {
+		group1 {
+			pinmux = <EDU_CIAA_PIN_UART2_TXD>,
+				 <EDU_CIAA_PIN_UART2_RXD>;
+		};
+	};
 };
 
-/* uart0 se mantiene deshabilitado: los pines P2_0/P2_1 del LPC4337 (donde en
- * otras placas suele mapearse USART0 TXD/RXD) están físicamente cableados en
- * la EDU-CIAA-NXP al LED RGB (LEDR/LEDG), no a un conector serie. El puente
- * USB-serie de depuración de esta placa sale por el canal B del FT2232H
- * (U6); el pin exacto del LPC4337 al que se conecta ese canal no está
- * confirmado todavía. [verificar] Ver PORTING_GUIDE.md sección 8. */
+&uart2 {
+	status = "okay";
+	current-speed = <115200>;
+	pinctrl-0 = <&uart2_default>;
+	pinctrl-names = "default";
+};
