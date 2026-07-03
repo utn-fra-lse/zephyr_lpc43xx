@@ -70,10 +70,8 @@
 #define EDU_CIAA_PIN_TEC3  LPC43XX_PIN(1, 2, 0, LPC43XX_PULL_UP, 1)
 #define EDU_CIAA_PIN_TEC4  LPC43XX_PIN(1, 6, 0, LPC43XX_PULL_UP, 1)
 
-/*
- * [verificar] Los pines de UART hacia el puente USB-serie del FT2232H (canal
- * B) no están confirmados pin a pin contra el esquemático — no se agregan
- * macros de UART acá hasta confirmarlo. Ver PORTING_GUIDE.md sección 8.
- */
+/* UART usado para consola por USB (UART2) */
+#define EDU_CIAA_PIN_UART2_TXD	LPC43XX_PIN(7, 1, 6, LPC43XX_PULL_NONE, 1)
+#define EDU_CIAA_PIN_UART2_RXD	LPC43XX_PIN(7, 2, 6, LPC43XX_PULL_NONE, 1)
 
 #endif /* ZEPHYR_INCLUDE_DT_BINDINGS_PINCTRL_LPC43XX_PINCTRL_H_ */
