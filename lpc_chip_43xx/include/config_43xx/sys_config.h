@@ -31,7 +31,9 @@
 #define __SYS_CONFIG_H_
 
 /* LPC43xx chip family */
+#ifndef CHIP_LPC43XX
 #define CHIP_LPC43XX
+#endif
 
 #endif /* __SYS_CONFIG_H_ */
 
