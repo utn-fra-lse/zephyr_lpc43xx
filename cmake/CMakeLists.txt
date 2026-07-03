@@ -32,6 +32,7 @@ if(CONFIG_SOC_LPC4337)
     ${CMAKE_CURRENT_LIST_DIR}/../lpc_chip_43xx/src/chip_18xx_43xx.c
     ${CMAKE_CURRENT_LIST_DIR}/../lpc_chip_43xx/src/clock_18xx_43xx.c
     ${CMAKE_CURRENT_LIST_DIR}/../lpc_chip_43xx/src/sysinit_18xx_43xx.c
+    ${CMAKE_CURRENT_LIST_DIR}/../lpc_chip_43xx/src/uart_18xx_43xx.c
   )
   # clock_18xx_43xx.c    -> funciones Chip_Clock_* (CGU: PLL1, dividers, base clocks)
   # sysinit_18xx_43xx.c  -> Chip_SetupXtalClocking() / Chip_SystemInit()
@@ -55,6 +56,11 @@ if(CONFIG_SOC_LPC4337)
   if(CONFIG_GPIO)
     add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../drivers/gpio
                      ${CMAKE_CURRENT_BINARY_DIR}/drivers/gpio)
+  endif()
+
+  if(CONFIG_UART_LPC43XX)
+    add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../drivers/serial
+                     ${CMAKE_CURRENT_BINARY_DIR}/drivers/serial)
   endif()
 
 endif()
